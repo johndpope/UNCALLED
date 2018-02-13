@@ -101,7 +101,7 @@ bool SeedGraph::Node::should_report(const AlnParams &params) {
            seed_prob_ >= params.min_seed_pr_ * length_;
 }
 
-void SeedGraph::Node::invalidate(std::vector<Node *> *old_nodes, 
+void SeedGraph::Node::invalidate(std::vector<Node *> &old_nodes, 
                                  bool delete_source = false) {
 
     std::vector<Node *> to_remove;
@@ -118,7 +118,7 @@ void SeedGraph::Node::invalidate(std::vector<Node *> *old_nodes,
         }
 
         if (!n->parents_.empty() || delete_source) {
-            old_nodes->push_back(n);
+            old_nodes.push_back(n);
         }
 
         n->parents_.clear();
@@ -210,6 +210,22 @@ bool SeedGraph::Node::remove_child(Node *child) {
     return false;
 }
 
+void SeedGraph::Node::prune_longest(std::vector<Node*> &old_nodes) {
+    Node *head_parent = parents_.front().first;
+
+    if (parents_.size() == 1 || head_parent->source_count_ > 1) {
+        head_parent->prune_longest();
+    } else {
+        head_parent->remove_child(this);
+
+        if (head_parent->children_.empty()) {
+            head_parent->invalidate(old_nodes);
+        }
+    }
+
+    update_info();
+}
+
 
 AlnParams::AlnParams(const KmerModel &model,
                      int min_seed_nlen, 
@@ -267,7 +283,7 @@ void SeedGraph::new_read(int read_len) {
 void SeedGraph::reset() {
     for (auto p = prev_nodes_.begin(); p != prev_nodes_.end(); p++) {
         if (!p->first->parents_.empty())
-            p->first->invalidate(&old_nodes_);
+            p->first->invalidate(old_nodes_);
     }
 
     prev_nodes_.clear();
@@ -432,7 +448,7 @@ std::vector<Result> SeedGraph::add_event(Event e, std::ostream &out) {
         Node *prev_node = p->first;
 
         if (prev_node->children_.empty()) {
-            prev_node->invalidate(&old_nodes_);
+            prev_node->invalidate(old_nodes_);
         }
 
         prev_nodes_.erase(p);
@@ -581,6 +597,7 @@ SeedGraph::Node *SeedGraph::add_child(Range &range, Node &node) {
         //Update parents and children
         dup_node->parents_.push_front(new_parent);
         new_parent.first->children_.push_front(dup_node);
+        dup_node->source_count_++;
 
         //No new nodes created
         return dup_node;
@@ -588,15 +605,19 @@ SeedGraph::Node *SeedGraph::add_child(Range &range, Node &node) {
     } else if (dup_node->seed_len() == node.seed_len()) {
 
         if(node.better_than(dup_node)) {
-        //if ( dup_node->ignore_count_ > node.ignore_count_ 
-        //    || (dup_node->ignore_count_ == node.ignore_count_ && 
-        //        dup_node->seed_prob_ < node.seed_prob_)) {
 
-            //If dup_parent has no children in the end, will be invalidated (in add_event)
-            dup_parent->first->remove_child(dup_node);
+            if (dup_node->source_count_ == 1) {
 
-            //Erase old parent 
-            dup_node->parents_.erase(dup_parent);
+                //If dup_parent has no children in the end, 
+                //will later be invalidated (in add_event)
+                dup_parent->first->remove_child(dup_node);
+
+                //Erase old parent 
+                dup_node->parents_.erase(dup_parent);
+
+            } else {
+                dup_parent->first->prune_longest(old_nodes_);
+            }
 
             //Copy seed info
             dup_node->replace_info(node);
@@ -604,6 +625,11 @@ SeedGraph::Node *SeedGraph::add_child(Range &range, Node &node) {
             //Insert new parent in old parent's place
             dup_node->parents_.push_front(new_parent);
             new_parent.first->children_.push_front(dup_node);
+
+        } else if (new_parent->source_count_ > 1) {
+            new_parent->prune_longest(old_nodes_);
+
+            //new_parent now shorter - 
         }
 
         return dup_node;
@@ -672,7 +698,7 @@ std::vector<Result> SeedGraph::pop_seeds(std::ostream &out) {
 
         if (!aln_en->is_valid()) {
             aln_ends.pop_front();
-            aln_en->invalidate(&old_nodes_, true);
+            aln_en->invalidate(old_nodes_, true);
             //delete aln_en;
             continue;
         }
@@ -742,7 +768,7 @@ std::vector<Result> SeedGraph::pop_seeds(std::ostream &out) {
 
                     //Remove old parent
                     if (to_erase->remove_child(n)) {
-                        to_erase->invalidate(&old_nodes_);
+                        to_erase->invalidate(old_nodes_);
                     }
 
                     n->update_info();
@@ -815,7 +841,7 @@ std::vector<Result> SeedGraph::pop_seeds(std::ostream &out) {
         }
         
         aln_ends.pop_front();
-        aln_en->invalidate(&old_nodes_, true);
+        aln_en->invalidate(old_nodes_, true);
         //delete aln_en;
     }
 

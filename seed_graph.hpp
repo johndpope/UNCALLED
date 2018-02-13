@@ -67,7 +67,8 @@ class SeedGraph {
         int length_, 
             stay_count_,
             skip_count_,
-            ignore_count_;
+            ignore_count_,
+            source_count_;
 
         mer_id kmer_;
         double event_prob_, seed_prob_;
