@@ -5,7 +5,7 @@ SDSL_INC=-I/home-4/skovaka1@jhu.edu/software/sdsl-lite/include
 #BOOST_INCLUDE=-I/cm/local/apps/boost/1.58.0/include
 HDF5_INCLUDE=-I/cm/shared/apps/hdf5/1.8.17/include
 CC=g++
-CFLAGS=-Wall -std=c++11 -O3
+CFLAGS=-Wall -std=c++11 -g
 INCLUDE=-I./src/fast5/src -I./src/scrappie -I./src #${BOOST_INCLUDE}
 
 UNCALLED_OBJS= kmer_model.o aligner.o seed_tracker.o arg_parse.o basepairs.o range.o

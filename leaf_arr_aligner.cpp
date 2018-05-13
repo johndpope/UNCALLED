@@ -32,12 +32,12 @@ LeafArrAligner::PathBuffer::PathBuffer()
 LeafArrAligner::PathBuffer::PathBuffer(const PathBuffer &p) :
     length_ (p.length_),
     consec_stays_ (p.consec_stays_),
-    prhd_   (p.prhd_),
-    prtl_   (p.prtl_),
-    prlen_  (p.prlen_),
-    tyhd_   (p.tyhd_),
-    tytl_   (p.tytl_),
-    tylen_  (p.tylen_),
+    //prhd_   (p.prhd_),
+    //prtl_   (p.prtl_),
+    //prlen_  (p.prlen_),
+    //tyhd_   (p.tyhd_),
+    //tytl_   (p.tytl_),
+    //tylen_  (p.tylen_),
     win_prob_ (p.win_prob_),
     prob_sums_ (p.prob_sums_),
     event_types_ (p.event_types_),
@@ -65,12 +65,12 @@ void LeafArrAligner::PathBuffer::free_buffers() {
 void LeafArrAligner::PathBuffer::make_source(Range &range, Kmer kmer, float prob) {
     length_ = 1;
     consec_stays_ = 0;
-    prtl_ = 0;
-    prhd_ = 1;
-    prlen_ = 1;
-    tytl_ = 0;
-    tyhd_ = 0;
-    tylen_ = 1;
+    //prtl_ = 0;
+    //prhd_ = 1;
+    //prlen_ = 1;
+    //tytl_ = 0;
+    //tyhd_ = 0;
+    //tylen_ = 1;
     win_prob_ = prob;
     fm_range_ = range;
     kmer_ = kmer;
@@ -85,9 +85,9 @@ void LeafArrAligner::PathBuffer::make_source(Range &range, Kmer kmer, float prob
     }
 
     //TODO: don't write this here to speed up source loop
-    prob_sums_[prtl_] = 0;
-    prob_sums_[prhd_] = prob;
-    event_types_[tyhd_] = EventType::MATCH;
+    prob_sums_[0] = 0;
+    prob_sums_[1] = prob;
+    event_types_[0] = EventType::MATCH;
 }
 
 /*
@@ -133,40 +133,57 @@ void LeafArrAligner::PathBuffer::make_child(PathBuffer &p,
     length_ = p.length_ + 1;
 
     //TODO: float initing some of these below
-    prtl_ = p.prtl_;
-    prhd_ = p.prhd_;
-    prlen_ = p.prlen_;
-    tytl_ = p.tytl_;
-    tyhd_ = p.tyhd_;
-    tylen_ = p.tylen_;
+    //prtl_ = p.prtl_;
+    //prhd_ = p.prhd_;
+    //prlen_ = p.prlen_;
+    //tytl_ = p.tytl_;
+    //tyhd_ = p.tyhd_;
+    //tylen_ = p.tylen_;
 
     consec_stays_ = p.consec_stays_;
     fm_range_ = range;
     kmer_ = kmer;
     sa_checked_ = p.sa_checked_;
 
-    //std::cout << prob_sums_ << " " << p.prob_sums_ << " " << length_ << "\n";
-    std::memcpy(prob_sums_, p.prob_sums_, PROB_WIN_LEN * sizeof(float));
-    std::memcpy(event_types_, p.event_types_, TYPE_WIN_LEN * sizeof(EventType));
     std::memcpy(all_type_counts_, p.all_type_counts_, EventType::NUM_TYPES * sizeof(unsigned short));
     std::memcpy(win_type_counts_, p.win_type_counts_, EventType::NUM_TYPES * sizeof(unsigned char));
 
-    if (tylen_ < TYPE_WIN_LEN) { //TODO: maybe off by 1
-        tyhd_++;
-        tylen_++;
-    } else {
-        tyhd_ = tytl_;
-        tytl_ = (tytl_ + 1) % TYPE_WIN_LEN;
-        win_type_counts_[event_types_[tyhd_]]--;
+    //std::cout << prob_sums_ << " " << p.prob_sums_ << " " << length_ << "\n";
 
-        win_type_counts_[event_types_[tytl_]]--;
-        event_types_[tytl_] = EventType::MATCH;
+    if (length_ < TYPE_WIN_LEN) {
+        std::memcpy(prob_sums_, 
+                    p.prob_sums_, 
+                    (length_+1) * sizeof(float));
+
+        std::memcpy(event_types_, 
+                    p.event_types_, 
+                    length_ * sizeof(EventType));
+
+        event_types_[length_-1] = type;
+        prob_sums_[length_] = prob;
+
+    } else {
+        std::memcpy(prob_sums_, 
+                    &(p.prob_sums_[1]),
+                    (PROB_WIN_LEN-1) * sizeof(float));
+
+        std::memcpy(event_types_, 
+                    &(p.event_types_[1]), 
+                    (TYPE_WIN_LEN-1) * sizeof(EventType));
+
+        win_type_counts_[p.event_types_[0]]--;
+        win_type_counts_[event_types_[0]]--;
         win_type_counts_[EventType::MATCH]++;
+        event_types_[0] = EventType::MATCH;
+
+        event_types_[TYPE_WIN_LEN-1] = type;
+        prob_sums_[PROB_WIN_LEN-1] = prob;
     }
 
-    event_types_[tyhd_] = type;
     win_type_counts_[type]++;
     all_type_counts_[type]++;
+
+    win_prob_ = mean_prob();
 
     if (type == EventType::STAY) {
         consec_stays_++;
@@ -174,17 +191,7 @@ void LeafArrAligner::PathBuffer::make_child(PathBuffer &p,
         consec_stays_ = 0;
     }
 
-    if (prlen_ < PROB_WIN_LEN - 1) { //TODO: maybe off by 1
-        prob_sums_[prhd_+1] = prob_sums_[prhd_] + prob;
-        prhd_++;
-        prlen_++;
-    } else {
-        prob_sums_[prtl_] = prob_sums_[prhd_] + prob;
-        prhd_ = prtl_;
-        prtl_ = (prtl_ + 1) % PROB_WIN_LEN;
-    }
 
-    win_prob_ = mean_prob();
 }
 
 void LeafArrAligner::PathBuffer::invalidate() {
@@ -204,7 +211,7 @@ size_t LeafArrAligner::PathBuffer::match_len() {
 }
 
 float LeafArrAligner::PathBuffer::mean_prob() const {
-    return (prob_sums_[prhd_] - prob_sums_[prtl_]) / prlen_;
+    return (prob_sums_[length_ < PROB_WIN_LEN ? length_ : PROB_WIN_LEN-1] - prob_sums_[0]) / length_;
 }
 
 bool LeafArrAligner::PathBuffer::better_than(const PathBuffer &p) {
@@ -232,13 +239,6 @@ bool LeafArrAligner::PathBuffer::better_than_parent(const PathBuffer *a, float p
 }
 */
 
-float LeafArrAligner::PathBuffer::next_mean_prob() {
-    float x = prob_sums_[prhd_], 
-           y = prob_sums_[(prlen_ == PROB_WIN_LEN-1 && prtl_ < PROB_WIN_LEN-1) ? prtl_ + 1 : 0];
-    unsigned int len = prlen_ - (prlen_ == PROB_WIN_LEN-1);
-    return (x - y) / len;
-}
-
 bool LeafArrAligner::PathBuffer::should_report(const AlnParams &p,
                                                 bool path_ended) {
     //if (length_ >= 22) {
@@ -256,19 +256,19 @@ bool LeafArrAligner::PathBuffer::should_report(const AlnParams &p,
                  match_len() >= p.min_rep_len_)) &&
 
            length_ >= p.path_win_len_ &&
-           event_types_[tyhd_] == EventType::MATCH &&
-           (path_ended || win_type_counts_[EventType::STAY] <= p.max_stay_frac_ * tylen_) &&
+           event_types_[length_ < TYPE_WIN_LEN ? length_-1 : TYPE_WIN_LEN-1] == EventType::MATCH &&
+           (path_ended || win_type_counts_[EventType::STAY] <= p.max_stay_frac_ * std::min(length_, (unsigned short) TYPE_WIN_LEN)) &&
            win_prob_ >= p.window_prob_;
 }
 
 void LeafArrAligner::PathBuffer::replace(const PathBuffer &p) {
     length_ = p.length_;
-    prtl_ = p.prtl_;
-    prhd_ = p.prhd_;
-    prlen_ = p.prlen_;
-    tytl_ = p.tytl_;
-    tyhd_ = p.tyhd_;
-    tylen_ = p.tylen_;
+    //prtl_ = p.prtl_;
+    //prhd_ = p.prhd_;
+    //prlen_ = p.prlen_;
+    //tytl_ = p.tytl_;
+    //tyhd_ = p.tyhd_;
+    //tylen_ = p.tylen_;
     win_prob_ = p.win_prob_;
     consec_stays_ = p.consec_stays_;
     fm_range_ = p.fm_range_;

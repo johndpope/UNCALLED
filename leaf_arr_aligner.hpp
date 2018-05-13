@@ -22,7 +22,7 @@ class LeafArrAligner : public Aligner {
             consec_stays_;
 
         //Prob window head/tail index, type window head index
-        unsigned char prhd_, prtl_, prlen_, tyhd_, tytl_, tylen_;
+        //unsigned char prhd_, prtl_, prlen_, tyhd_, tytl_, tylen_;
         float win_prob_;
 
         float *prob_sums_;
